@@ -23,8 +23,9 @@
         .box {
             background: white;
             padding: 30px;
+            margin-bottom: 20px; /* 卡片之间的间距 */
             border: 1px solid #eee; /* 细边框 */
-            border-radius: 8px;
+            border-radius: 0; /* 直角 */
         }
 
         .button {
@@ -36,6 +37,29 @@
             text-decoration: none;
             border-radius: 4px;
             font-size: 14px;
+        }
+
+        /* 白色幽灵按钮,用于神秘入口 */
+        .button-white {
+            background: #fff;
+            color: #000;
+            border: 1px solid #000;
+        }
+
+        .button-white:hover {
+            background: #000;
+            color: #fff;
+        }
+
+        /* 隐藏入口:默认完全透明,悬停或键盘聚焦时才浮现 */
+        .secret {
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .secret:hover,
+        .secret:focus {
+            opacity: 1;
         }
 
         p { color: #666; font-size: 15px; }
@@ -61,6 +85,10 @@
                 Steam Profile
             </a>
         </div>
+
+        <a href="littlegame.html" class="button button-white secret">
+            Enter
+        </a>
     </div>
 
 </body>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小恐龙 | Vortexluan</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #fafafa;
+            font-family: sans-serif;
+            color: #333;
+        }
+        h1 { font-size: 20px; margin-bottom: 8px; }
+        .tip { color: #666; font-size: 14px; margin-bottom: 16px; }
+        canvas {
+            background: #fff;
+            border: 1px solid #333;
+            display: block;
+            max-width: 92vw;
+            touch-action: manipulation; /* 防止移动端双击缩放 */
+        }
+        .back {
+            margin-top: 18px;
+            color: #666;
+            font-size: 13px;
+            text-decoration: none;
+            border-bottom: 1px solid #999;
+            padding-bottom: 2px;
+        }
+        .back:hover { color: #000; border-color: #000; }
+    </style>
+</head>
+<body>
+    <h1>🦖 小恐龙</h1>
+    <p class="tip">按 <strong>空格</strong> / <strong>↑</strong>,或点击画面跳跃 · 躲开仙人掌</p>
+    <canvas id="game" width="700" height="200"></canvas>
+    <a class="back" href="index.html">← 返回首页</a>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+
+        // ---------- 基础参数 ----------
+        const GROUND_Y = 170;      // 地面所在的高度(y 坐标)
+        const GRAVITY = 0.7;       // 重力加速度
+        const JUMP_V = -13;        // 起跳初速度(负值 = 向上)
+        const MAX_SPEED = 14;      // 速度上限
+
+        // ---------- 游戏状态 ----------
+        let state = 'waiting';     // waiting(等待开始) / running(进行中) / over(结束)
+        let speed = 6;             // 当前移动速度
+        let score = 0;             // 分数
+        let highScore = 0;         // 最高分
+        let obstacles = [];        // 障碍物(仙人掌)数组
+        let spawnTimer = 0;        // 距离生成下一个障碍物的倒计时(帧)
+        let frame = 0;             // 总帧数,用于腿的动画
+
+        // 读取最高分(localStorage 不一定在所有环境可用,做保护)
+        try {
+            highScore = Number(localStorage.getItem('dino-high') || 0);
+        } catch (e) {
+            highScore = 0;
+        }
+
+        // ---------- 小恐龙 ----------
+        const dino = {
+            x: 60,                 // 恐龙左边的位置
+            y: GROUND_Y,           // 恐龙的"脚底"y 坐标
+            w: 42,                 // 身体宽度
+            h: 44,                 // 总高度
+            vy: 0,                 // 垂直速度
+            jumping: false         // 是否在空中
+        };
+
+        // ---------- 工具函数 ----------
+        // 矩形碰撞检测:两个矩形有重叠就返回 true
+        function rectHit(ax, ay, aw, ah, bx, by, bw, bh) {
+            return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+        }
+
+        // ---------- 游戏逻辑 ----------
+        function reset() {
+            speed = 6;
+            score = 0;
+            obstacles = [];
+            spawnTimer = 120;      // 开局给一点缓冲时间
+            dino.y = GROUND_Y;
+            dino.vy = 0;
+            dino.jumping = false;
+        }
+
+        function jump() {
+            if (state === 'waiting') state = 'running';
+            if (state === 'running' && !dino.jumping) {
+                dino.vy = JUMP_V;
+                dino.jumping = true;
+            }
+        }
+
+        function update() {
+            if (state !== 'running') return;
+            frame++;
+
+            // 1. 恐龙跳跃物理
+            if (dino.jumping) {
+                dino.y += dino.vy;
+                dino.vy += GRAVITY;
+                // 落地
+                if (dino.y >= GROUND_Y) {
+                    dino.y = GROUND_Y;
+                    dino.vy = 0;
+                    dino.jumping = false;
+                }
+            }
+
+            // 2. 生成障碍物(仙人掌)
+            spawnTimer--;
+            if (spawnTimer <= 0) {
+                // 速度越快,生成间隔越小
+                const minGap = Math.max(70, 200 - speed * 9);
+                spawnTimer = minGap + Math.random() * 70;
+                const w = 16 + Math.random() * 12;
+                const h = 30 + Math.random() * 24;
+                obstacles.push({ x: canvas.width, y: GROUND_Y, w: w, h: h });
+            }
+
+            // 3. 移动障碍物 + 碰撞检测
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const ob = obstacles[i];
+                ob.x -= speed;
+
+                // 移出屏幕左侧就删掉
+                if (ob.x + ob.w < 0) {
+                    obstacles.splice(i, 1);
+                    continue;
+                }
+
+                // 碰撞判定(碰撞框比图形稍微小一点,手感更友好)
+                const hit = rectHit(
+                    dino.x + 6, dino.y - dino.h + 6, dino.w - 12, dino.h - 6,
+                    ob.x + 2, ob.y - ob.h, ob.w - 4, ob.h
+                );
+                if (hit) {
+                    state = 'over';
+                    // 更新最高分
+                    const finalScore = Math.floor(score);
+                    if (finalScore > highScore) {
+                        highScore = finalScore;
+                        try { localStorage.setItem('dino-high', highScore); } catch (e) {}
+                    }
+                }
+            }
+
+            // 4. 加分 + 逐渐加速
+            score += speed * 0.1;
+            if (speed < MAX_SPEED) speed += 0.003;
+        }
+
+        // ---------- 绘制 ----------
+        function draw() {
+            // 清空画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 地面线
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND_Y);
+            ctx.lineTo(canvas.width, GROUND_Y);
+            ctx.stroke();
+
+            // 仙人掌
+            ctx.fillStyle = '#333';
+            for (const ob of obstacles) {
+                // 主干
+                ctx.fillRect(ob.x, ob.y - ob.h, ob.w, ob.h);
+                // 两侧的小刺
+                ctx.fillRect(ob.x - 4, ob.y - ob.h + 6, 4, 4);
+                ctx.fillRect(ob.x + ob.w, ob.y - ob.h + 12, 4, 4);
+            }
+
+            // 小恐龙(用几个矩形拼成像素风)
+            drawDino();
+
+            // 分数
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('分数 ' + Math.floor(score), canvas.width - 10, 22);
+            if (highScore > 0) {
+                ctx.fillText('最高 ' + highScore, canvas.width - 10, 40);
+            }
+
+            // 三种状态的提示文字
+            ctx.textAlign = 'center';
+            if (state === 'waiting') {
+                ctx.fillText('按空格或点击画面开始', canvas.width / 2, 90);
+            } else if (state === 'over') {
+                ctx.fillText('GAME OVER', canvas.width / 2, 80);
+                ctx.fillText('点击或按空格重新开始', canvas.width / 2, 100);
+            }
+        }
+
+        function drawDino() {
+            const x = dino.x;
+            const y = dino.y;   // 脚底位置
+            ctx.fillStyle = '#000';
+
+            // 尾巴
+            ctx.fillRect(x - 14, y - 30, 16, 5);
+            // 身体
+            ctx.fillRect(x, y - 32, 24, 16);
+            // 头(在身体右侧)
+            ctx.fillRect(x + 20, y - 42, 18, 15);
+            // 嘴
+            ctx.fillRect(x + 32, y - 31, 8, 4);
+            // 眼睛(白色小方块)
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x + 30, y - 39, 3, 3);
+            ctx.fillStyle = '#000';
+
+            // 腿:跳跃时收起,跑动时两帧交替
+            if (dino.jumping) {
+                ctx.fillRect(x + 4, y - 12, 5, 8);
+                ctx.fillRect(x + 14, y - 12, 5, 8);
+            } else if (Math.floor(frame / 6) % 2 === 0) {
+                ctx.fillRect(x + 4, y - 16, 5, 16);
+                ctx.fillRect(x + 16, y - 12, 5, 12);
+            } else {
+                ctx.fillRect(x + 4, y - 12, 5, 12);
+                ctx.fillRect(x + 16, y - 16, 5, 16);
+            }
+        }
+
+        // ---------- 主循环 ----------
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // ---------- 事件 ----------
+        document.addEventListener('keydown', function (e) {
+            // 空格 或 上箭头
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault();          // 防止空格滚动页面
+                if (state === 'over') {
+                    reset();
+                    state = 'running';
+                } else {
+                    jump();
+                }
+            }
+        });
+
+        canvas.addEventListener('pointerdown', function () {
+            if (state === 'over') {
+                reset();
+                state = 'running';
+            } else {
+                jump();
+            }
+        });
+
+        // 开始!
+        reset();
+        loop();
+    </script>
+</body>
+</html>
